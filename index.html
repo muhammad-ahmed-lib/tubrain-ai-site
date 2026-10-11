@@ -31,7 +31,7 @@
             align-items: center;
             justify-content: center;
             z-index: 9999;
-            transition: opacity 0.5s ease;
+            transition: opacity 0.8s ease;
         }
 
         #loading-screen.fade-out {
@@ -58,6 +58,13 @@
             margin-bottom: 32px;
         }
 
+        .loading-status {
+            font-size: 12px;
+            color: #FF6B35;
+            margin-bottom: 16px;
+            min-height: 20px;
+        }
+
         .loading-bar {
             width: 200px;
             height: 4px;
@@ -68,9 +75,10 @@
 
         .loading-bar-fill {
             height: 100%;
+            width: 0%;
             background: linear-gradient(90deg, #FF0000, #FF6B35);
             border-radius: 2px;
-            animation: loading 2s ease-in-out infinite;
+            transition: width 0.3s ease;
         }
 
         @keyframes pulse {
@@ -78,47 +86,89 @@
             50% { transform: scale(1.1); }
         }
 
-        @keyframes loading {
-            0% { width: 0%; }
-            50% { width: 70%; }
-            100% { width: 100%; }
-        }
-
         canvas {
-            width: 100%;
-            height: 100vh;
+            width: 100% !important;
+            height: 100vh !important;
         }
     </style>
 </head>
 <body>
+
 <!-- Loading screen shown while WASM loads -->
 <div id="loading-screen">
     <div class="loading-logo">🧠</div>
     <div class="loading-title">Tube Brain AI</div>
     <div class="loading-subtitle">Data-Driven Insights for Content Creators</div>
+    <div class="loading-status" id="loading-status">Loading...</div>
     <div class="loading-bar">
-        <div class="loading-bar-fill"></div>
+        <div class="loading-bar-fill" id="loading-bar-fill"></div>
     </div>
 </div>
 
-<!-- Load external JS modules first -->
-<script src="downloader.js"></script>
-
-<script src="skiko.js"></script>
-<script src="composeApp.js"></script>
 <script>
-    // Hide loading screen once app loads
-    window.addEventListener('load', function() {
-        setTimeout(function() {
-            const loadingScreen = document.getElementById('loading-screen');
-            if (loadingScreen) {
-                loadingScreen.classList.add('fade-out');
-                setTimeout(function() {
-                    loadingScreen.style.display = 'none';
-                }, 500);
+    // Progress tracker
+    const statusEl = document.getElementById('loading-status');
+    const barEl = document.getElementById('loading-bar-fill');
+
+    function setProgress(percent, message) {
+        barEl.style.width = percent + '%';
+        statusEl.textContent = message;
+    }
+
+    function hideLoadingScreen() {
+        const loadingScreen = document.getElementById('loading-screen');
+        if (loadingScreen) {
+            loadingScreen.classList.add('fade-out');
+            setTimeout(function () {
+                loadingScreen.style.display = 'none';
+            }, 800);
+        }
+    }
+
+    // Watch for canvas to appear — means Wasm app is ready
+    function waitForApp() {
+        const observer = new MutationObserver(function(mutations) {
+            const canvas = document.querySelector('canvas');
+            if (canvas) {
+                observer.disconnect();
+                setProgress(100, 'Ready!');
+                setTimeout(hideLoadingScreen, 500);
             }
-        }, 1500);
-    });
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        // Fallback: hide after 30 seconds no matter what
+        setTimeout(hideLoadingScreen, 30000);
+    }
+
+    setProgress(10, 'Loading resources...');
+
+    // Load scripts in order with progress tracking
+    function loadScript(src, progressPercent, message) {
+        return new Promise((resolve, reject) => {
+            setProgress(progressPercent, message);
+            const script = document.createElement('script');
+            script.src = src;
+            script.onload = resolve;
+            script.onerror = reject;
+            document.body.appendChild(script);
+        });
+    }
+
+    // Load all scripts then start watching for app
+    (async () => {
+        try {
+            await loadScript('downloader.js', 20, 'Loading downloader...');
+            await loadScript('skiko.js', 50, 'Loading graphics engine...');
+            setProgress(70, 'Starting app...');
+            waitForApp();
+            await loadScript('composeApp.js', 85, 'Loading app...');
+        } catch (e) {
+            statusEl.textContent = 'Error loading. Please refresh.';
+            statusEl.style.color = '#FF0000';
+        }
+    })();
 </script>
+
 </body>
 </html>
